@@ -15,13 +15,15 @@ from typing import Iterator
 
 from app.core.config import settings
 from app.core.logging_setup import logger
+from app.core.exceptions import DatabaseError
 
 
 @contextmanager
 def db_cursor(db_path=None) -> Iterator[sqlite3.Cursor]:
     """
     Yields a sqlite3 cursor. Commits on clean exit, rolls back and
-    re-raises on exception. Always closes the connection.
+    re-raises (wrapped in DatabaseError) on exception. Always closes
+    the connection.
     """
     path = db_path or settings.db_path
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -32,10 +34,13 @@ def db_cursor(db_path=None) -> Iterator[sqlite3.Cursor]:
     try:
         yield cur
         conn.commit()
-    except Exception:
+    except Exception as e:
         conn.rollback()
         logger.exception("DB operation failed, rolled back. path={}", path)
-        raise
+        raise DatabaseError(
+            "SQLite operation failed and was rolled back",
+            context={"db_path": str(path)},
+        ) from e
     finally:
         conn.close()
 
