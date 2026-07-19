@@ -33,6 +33,7 @@ from app.core.exceptions import (
     ToolExecutionError,
     ApprovalDeniedError,
 )
+from app.events.bus import event_bus
 from app.core.database import db_cursor
 from app.core.logging_setup import logger
 from app.core.approval import ApprovalHandler, DefaultSafeApprovalHandler
@@ -79,7 +80,10 @@ def call_tool(
     """
     The single execution path for every tool call in the system.
     tool_kwargs is an explicit dict — never **kwargs (see collision
-    lesson in module docstring).
+    lesson in module docstring). Publishes a 'tool.executed' event
+    on every outcome (success or failure) so subsystems (Notification
+    Framework, Job Queue, future Knowledge Base logging) can react
+    without call_tool needing to know about them.
     """
     tool_kwargs = tool_kwargs or {}
     approval_handler = approval_handler or DefaultSafeApprovalHandler()
@@ -89,10 +93,9 @@ def call_tool(
     if registered is None:
         err = f"Tool '{tool_name}' is not registered"
         _log_execution(tool_name, tool_kwargs, "failure", None, err, started_at, _now_iso())
+        event_bus.publish("tool.executed", {"tool_name": tool_name, "status": "failure", "error": err})
         raise ToolNotFoundError(err, context={"tool_name": tool_name})
 
-    # Step 2: input validation (schema wiring completed in M2; tolerate
-    # tools with no schema yet, since we're mid-milestone)
     validated_kwargs = tool_kwargs
     if registered.input_schema is not None:
         try:
@@ -101,17 +104,17 @@ def call_tool(
         except Exception as e:
             err = f"Input validation failed for tool '{tool_name}': {e}"
             _log_execution(tool_name, tool_kwargs, "failure", None, err, started_at, _now_iso())
+            event_bus.publish("tool.executed", {"tool_name": tool_name, "status": "failure", "error": err})
             raise ToolValidationError(err, context={"tool_name": tool_name}) from e
 
-    # Step 3: approval gate
     if registered.permission in _REQUIRES_APPROVAL:
         approved = approval_handler.request_approval(tool_name, registered.permission, validated_kwargs)
         if not approved:
             err = f"Approval denied for tool '{tool_name}'"
             _log_execution(tool_name, validated_kwargs, "failure", None, err, started_at, _now_iso())
+            event_bus.publish("tool.executed", {"tool_name": tool_name, "status": "failure", "error": err})
             raise ApprovalDeniedError(err, context={"tool_name": tool_name})
 
-    # Step 4: execute
     try:
         raw_result = registered.func(**validated_kwargs)
     except Exception as e:
@@ -119,15 +122,16 @@ def call_tool(
         err = f"Execution failed for tool '{tool_name}': {e}"
         logger.exception("Tool '{}' raised during execution.", tool_name)
         _log_execution(tool_name, validated_kwargs, "failure", None, str(e), started_at, finished_at)
+        event_bus.publish("tool.executed", {"tool_name": tool_name, "status": "failure", "error": str(e)})
         raise ToolExecutionError(err, context={"tool_name": tool_name}) from e
 
-    # Step 5: log success
     finished_at = _now_iso()
     _log_execution(tool_name, validated_kwargs, "success", raw_result, None, started_at, finished_at)
 
-    # Step 6: never return None on success
     result = ToolResult(success=True, tool_name=tool_name, data=raw_result, error=None)
     assert result is not None  # regression guard, see module docstring
+
+    event_bus.publish("tool.executed", {"tool_name": tool_name, "status": "success", "data": raw_result})
     return result
 
 
