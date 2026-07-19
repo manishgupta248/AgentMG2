@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     logs_dir: Path = PROJECT_ROOT / "logs"
     db_path: Path = PROJECT_ROOT / "data" / "agent.db"
 
+    # ---External Tools
+    tesseract_cmd_path: Path = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+    
     # --- Logging ---
     log_level: str = "DEBUG"
     log_rotation: str = "10 MB"
