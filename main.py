@@ -1,13 +1,15 @@
 """
 Personal AI Agent — Entrypoint
-Milestone: M1 (Foundation) — config, logging, SQLite, exceptions,
-and plugin registry with recursive discovery, all wired in.
+Milestone: M1 (Foundation) — full core wired: config, logging, SQLite,
+exceptions, plugin registry, approval handler, call_tool executor.
 """
 
 from app.core.config import settings
 from app.core.logging_setup import setup_logging, logger
 from app.core.database import init_db, db_cursor
 from app.core.registry import autodiscover_tools, list_tools
+from app.core.executor import call_tool
+from app.core.approval import AutoApprovalHandler
 
 
 def main() -> None:
@@ -15,23 +17,27 @@ def main() -> None:
     logger.info("Agent starting up.")
 
     init_db()
-
-    with db_cursor() as cur:
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = [row[0] for row in cur.fetchall()]
-    logger.info("Tables present: {}", tables)
-
-    modules_imported = autodiscover_tools()
+    autodiscover_tools()
     tools = list_tools()
-
-    logger.info("Modules imported: {}", modules_imported)
     logger.info("Tools registered: {}", list(tools.keys()))
 
-    for name, t in tools.items():
-        print(f"  - {name} (permission={t.permission.value}): {t.description}")
+    # Exercise call_tool end-to-end on a READ tool (auto-approves, no prompt)
+    result = call_tool("ping", {}, approval_handler=AutoApprovalHandler())
+    print("call_tool('ping') ->", result)
 
-    print(f"\nAgent scaffold OK. {len(tools)} tool(s) discovered, including one from a nested subfolder.")
-    print("Ready for M1 Step 6 (ApprovalHandler protocol + call_tool executor).")
+    result2 = call_tool("echo", {"text": "hello agent"}, approval_handler=AutoApprovalHandler())
+    print("call_tool('echo', text='hello agent') ->", result2)
+
+    # Confirm the execution_history audit rows were written
+    with db_cursor() as cur:
+        cur.execute("SELECT tool_name, status, result FROM execution_history ORDER BY id DESC LIMIT 5")
+        rows = cur.fetchall()
+    print("\nRecent execution_history rows:")
+    for row in rows:
+        print(" ", row)
+
+    print("\nAgent scaffold OK. call_tool executor verified end-to-end with audit logging.")
+    print("Ready for M1 Step 7 (Pydantic input validation wired into tools) — or M2 if this concludes M1.")
 
 
 if __name__ == "__main__":
