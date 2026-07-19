@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     # --- Telegram ---
     telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
 
     # --- Google OAuth ---
     google_credentials_path: Path = PROJECT_ROOT / "config" / "credentials.json"
