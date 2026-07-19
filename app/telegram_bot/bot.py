@@ -70,6 +70,16 @@ async def _on_post_init(application: Application) -> None:
     approval_handler.set_loop(asyncio.get_running_loop())
     logger.info("TelegramApprovalHandler loop captured via post_init.")
 
+    # Register Telegram as a real notification channel now that the
+    # bot (and thus a valid chat_id target) is confirmed running.
+    from app.notifications.manager import notification_manager
+    from app.notifications.telegram_channel import TelegramChannel
+    from app.notifications.event_subscriber import wire_notifications_to_event_bus
+
+    notification_manager.register_channel(TelegramChannel())
+    wire_notifications_to_event_bus()
+    logger.info("TelegramChannel registered with NotificationManager; failure notifications now go to Telegram.")
+
 def build_application() -> Application:
     autodiscover_tools()
 
