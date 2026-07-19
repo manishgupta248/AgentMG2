@@ -35,6 +35,7 @@ from app.core.exceptions import (
 )
 from app.core.database import db_cursor
 from app.core.logging_setup import logger
+from app.core.approval import ApprovalHandler, DefaultSafeApprovalHandler
 
 # Permission levels that require explicit human approval by default.
 # READ auto-approves; MODIFY/DELETE/ADMIN require it.
@@ -81,7 +82,7 @@ def call_tool(
     lesson in module docstring).
     """
     tool_kwargs = tool_kwargs or {}
-    approval_handler = approval_handler or AutoApprovalHandler()
+    approval_handler = approval_handler or DefaultSafeApprovalHandler()
     started_at = _now_iso()
 
     registered = get_tool(tool_name)

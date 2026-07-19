@@ -38,6 +38,29 @@ class AutoApprovalHandler:
     def request_approval(self, tool_name: str, permission: PermissionLevel, tool_kwargs: dict) -> bool:
         logger.debug("Auto-approved '{}' (permission={})", tool_name, permission.value)
         return True
+    
+
+class DefaultSafeApprovalHandler:
+    """
+    The safe default used when call_tool() is not given an explicit
+    approval_handler. Auto-approves READ (matches _REQUIRES_APPROVAL
+    policy), but RAISES rather than silently approving anything at
+    MODIFY/DELETE/ADMIN — a caller must pass a real handler (CLI,
+    Telegram, or an explicit AutoApprovalHandler if they really mean
+    to bypass approval, e.g. in tests) for anything destructive.
+    This closes a gap where forgetting to pass approval_handler=
+    would have silently auto-approved destructive actions.
+    """
+
+    def request_approval(self, tool_name: str, permission: PermissionLevel, tool_kwargs: dict) -> bool:
+        if permission == PermissionLevel.READ:
+            return True
+        raise RuntimeError(
+            f"No approval_handler was provided for tool '{tool_name}' "
+            f"(permission={permission.value}). Destructive/modifying tools "
+            f"require an explicit approval_handler — refusing to silently "
+            f"auto-approve."
+        )
 
 
-__all__ = ["ApprovalHandler", "CLIApprovalHandler", "AutoApprovalHandler"]
+__all__ = ["ApprovalHandler", "CLIApprovalHandler", "AutoApprovalHandler", "DefaultSafeApprovalHandler"]
