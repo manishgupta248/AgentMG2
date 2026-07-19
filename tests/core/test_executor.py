@@ -8,6 +8,16 @@ from app.core.registry import tool as tool_decorator, get_tool
 from app.core.types import PermissionLevel, ToolResult
 from app.core.executor import call_tool
 from app.core.approval import AutoApprovalHandler
+from pydantic import BaseModel
+
+
+class _TestPingInput(BaseModel):
+    model_config = {"extra": "forbid"}
+
+
+class _TestJobEnqueueInput(BaseModel):
+    tool_name: str
+    payload: str = ""
 
 
 def test_call_tool_never_returns_none_on_success(isolated_db, monkeypatch):
@@ -15,7 +25,7 @@ def test_call_tool_never_returns_none_on_success(isolated_db, monkeypatch):
     from app.core import database
     monkeypatch.setattr(database.settings, "db_path", isolated_db)
 
-    @tool_decorator("_test_ping", permission=PermissionLevel.READ, description="test")
+    @tool_decorator("_test_ping", permission=PermissionLevel.READ, description="test", input_schema=_TestPingInput)
     def _test_ping():
         return {"ok": True}
 
@@ -36,9 +46,8 @@ def test_tool_kwargs_no_collision_with_tool_name_param(isolated_db, monkeypatch)
     from app.core import database
     monkeypatch.setattr(database.settings, "db_path", isolated_db)
 
-    @tool_decorator("_test_job_enqueue", permission=PermissionLevel.READ, description="test")
+    @tool_decorator("_test_job_enqueue", permission=PermissionLevel.READ, description="test", input_schema=_TestJobEnqueueInput)
     def _test_job_enqueue(tool_name: str, payload: str = ""):
-        # This tool has ITS OWN 'tool_name' param — the exact collision scenario.
         return {"enqueued_tool": tool_name, "payload": payload}
 
     result = call_tool(
