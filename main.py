@@ -1,7 +1,7 @@
 """
 Personal AI Agent — Entrypoint
-Milestone: M1 (Foundation) — full core wired: config, logging, SQLite,
-exceptions, plugin registry, approval handler, call_tool executor.
+Milestone: M5 (Notification Framework) — console channel wired to
+event bus, notifying on tool failures.
 """
 
 from app.core.config import settings
@@ -10,6 +10,9 @@ from app.core.database import init_db, db_cursor
 from app.core.registry import autodiscover_tools, list_tools
 from app.core.executor import call_tool
 from app.core.approval import AutoApprovalHandler
+from app.notifications.manager import notification_manager
+from app.notifications.console_channel import ConsoleChannel
+from app.notifications.event_subscriber import wire_notifications_to_event_bus
 
 
 def main() -> None:
@@ -18,26 +21,21 @@ def main() -> None:
 
     init_db()
     autodiscover_tools()
-    tools = list_tools()
-    logger.info("Tools registered: {}", list(tools.keys()))
 
-    # Exercise call_tool end-to-end on a READ tool (auto-approves, no prompt)
-    result = call_tool("ping", {}, approval_handler=AutoApprovalHandler())
-    print("call_tool('ping') ->", result)
+    notification_manager.register_channel(ConsoleChannel())
+    wire_notifications_to_event_bus()
 
-    result2 = call_tool("echo", {"text": "hello agent"}, approval_handler=AutoApprovalHandler())
-    print("call_tool('echo', text='hello agent') ->", result2)
+    # Successful call -> no notification expected
+    call_tool("ping", {})
 
-    # Confirm the execution_history audit rows were written
-    with db_cursor() as cur:
-        cur.execute("SELECT tool_name, status, result FROM execution_history ORDER BY id DESC LIMIT 5")
-        rows = cur.fetchall()
-    print("\nRecent execution_history rows:")
-    for row in rows:
-        print(" ", row)
+    # Failing call -> SHOULD trigger a console notification automatically
+    try:
+        call_tool("echo", {})  # missing required 'text' -> validation failure
+    except Exception as e:
+        logger.info("Expected failure occurred: {}", e)
 
-    print("\nAgent scaffold OK. call_tool executor verified end-to-end with audit logging.")
-    print("Ready for M1 Step 7 (Pydantic input validation wired into tools) — or M2 if this concludes M1.")
+    print("\nAgent scaffold OK. Notification Framework wired: console channel notified on tool failure above.")
+    print("Ready for M5 Step 2 (regression tests) or M6 (Telegram as a NotificationChannel).")
 
 
 if __name__ == "__main__":
