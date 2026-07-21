@@ -120,10 +120,20 @@ def test_resolve_intent_raises_for_compound_request():
 
 def test_resolve_intent_raises_for_unrecognized_text():
     with pytest.raises(IntentResolutionError):
-        resolve_intent("this matches absolutely nothing we have defined")
-
+        resolve_intent("this matches absolutely nothing we have defined", allow_llm=False)
 
 def test_resolve_intent_case_insensitive():
     tool_name, kwargs = resolve_intent("ECHO Hello World")
     assert tool_name == "echo"
     assert kwargs["text"] == "Hello World"
+
+def test_resolve_intent_with_allow_llm_false_skips_tier3(isolated_db, monkeypatch):
+    """When allow_llm=False, an ambiguous request that would otherwise
+    hit Tier 3 should raise instead of making a real LLM call."""
+    from app.core import database
+    from app.core.registry import autodiscover_tools
+    monkeypatch.setattr(database.settings, "db_path", isolated_db)
+    autodiscover_tools()
+
+    with pytest.raises(IntentResolutionError, match="LLM disabled"):
+        resolve_intent("some vague request that matches nothing specific", allow_llm=False)

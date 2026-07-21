@@ -62,4 +62,4 @@ def test_router_raises_when_both_tier1_and_tier2_miss(isolated_db, monkeypatch):
 
     import pytest
     with pytest.raises(IntentResolutionError):
-        resolve_intent("this is not close to anything registered at all")
+        resolve_intent("this is not close to anything registered at all", allow_llm=False)
